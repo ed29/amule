@@ -39,6 +39,7 @@ option (BUILD_FILEVIEW "compile aMule file viewer for console (EXPERIMENTAL)")
 option (BUILD_MONOLITHIC "enable building of the monolithic aMule app" ON)
 option (BUILD_REMOTEGUI "compile aMule remote GUI")
 option (BUILD_WEBSERVER "compile aMule WebServer")
+option (BUILD_AMULEAPI "compile aMule REST API daemon")
 option (BUILD_WXCAS "compile aMule GUI Statistics")
 option (BUILD_TESTING "Build unit tests" OFF)
 
@@ -63,6 +64,7 @@ if (BUILD_EVERYTHING)
 	set (BUILD_FILEVIEW ON CACHE BOOL "compile aMule file viewer for console (EXPERIMENTAL)" FORCE)
 	set (BUILD_REMOTEGUI ON CACHE BOOL "compile aMule remote GUI" FORCE)
 	set (BUILD_WEBSERVER ON CACHE BOOL "compile aMule WebServer" FORCE)
+	set (BUILD_AMULEAPI ON CACHE BOOL "compile aMule REST API daemon" FORCE)
 	set (BUILD_WXCAS ON CACHE BOOL "compile aMule GUI Statistics" FORCE)
 endif()
 
@@ -72,6 +74,39 @@ if (BUILD_AMULECMD)
 	set (NEED_LIB_MULESOCKET TRUE)
 	set (wx_NEED_NET TRUE)
 	set (NEED_ZLIB TRUE)
+endif()
+
+if (BUILD_AMULEAPI)
+	# Mirrors amulecmd's needs: EC connection, mulecommon helpers (Format,
+	# MD5Sum), socket lib for CRemoteConnect. Boost.Beast is header-only
+	# so we don't add a Boost component requirement; the link-side Boost
+	# is already wired via the project-level `Boost_LIBRARIES` lookup.
+	#
+	# Hard-fail policy. `BUILD_AMULEAPI=YES` + missing dep must fail
+	# at configure time, never soft-disable the target. Today the
+	# guarantees come from upstream wiring:
+	#   * cryptopp — `NEED_LIB_EC` (set below) implies `NEED_LIB_CRYPTO`,
+	#     which includes cmake/cryptopp.cmake; that file FATAL_ERRORs
+	#     on a missing `cryptlib.h`.
+	#   * Boost   — `cmake/boost.cmake` runs unconditionally at the
+	#     project root and uses `find_package(Boost CONFIG REQUIRED)`,
+	#     which FATAL_ERRORs on miss.
+	# If a future refactor breaks either chain (e.g. moves Boost
+	# behind a conditional `if`), add an explicit `find_package(Boost
+	# CONFIG REQUIRED)` here so amuleapi keeps fail-loud.
+	set (NEED_LIB_EC TRUE)
+	set (NEED_LIB_MULECOMMON TRUE)
+	set (NEED_LIB_MULESOCKET TRUE)
+	set (wx_NEED_NET TRUE)
+	set (NEED_ZLIB TRUE)
+	# Compile-time install path the daemon falls back to when
+	# [Server]/StaticRoot is empty in the conf. Mirrors WEBSERVERDIR but
+	# uses the ABSOLUTE form so a binary running from /usr/local/bin
+	# (or wherever the operator put it) resolves to the matching
+	# /usr/local/share/amule/amuleapi-static without needing to be
+	# cwd'd at the install prefix.
+	set (AMULEAPI_STATIC_DIR
+		"${CMAKE_INSTALL_FULL_DATADIR}/${PACKAGE}/amuleapi-static/")
 endif()
 
 if (BUILD_CAS)
@@ -196,7 +231,7 @@ endif()
 # wxWidgets::NET directly in src/webserver/src/CMakeLists.txt for its
 # socket code). Keep wx_NEED_NET on only when those are actually being
 # built.
-if (NOT (BUILD_DAEMON OR BUILD_MONOLITHIC OR BUILD_REMOTEGUI OR BUILD_WEBSERVER OR BUILD_WXCAS OR BUILD_AMULECMD))
+if (NOT (BUILD_DAEMON OR BUILD_MONOLITHIC OR BUILD_REMOTEGUI OR BUILD_WEBSERVER OR BUILD_WXCAS OR BUILD_AMULECMD OR BUILD_AMULEAPI))
 	set (wx_NEED_NET FALSE)
 endif()
 

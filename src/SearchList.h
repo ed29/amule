@@ -108,6 +108,28 @@ public:
 	/** Returns the completion percentage of the current search. */
 	uint32 GetSearchProgress() const;
 
+	// Unambiguous lifecycle accessors used by the new EC tags
+	// (EC_TAG_SEARCH_LIFECYCLE_STATE / _KIND / _RESULT_COUNT). Old
+	// consumers still read the overloaded GetSearchProgress() return.
+	enum SearchLifecycleState
+	{
+		SEARCH_LIFECYCLE_IDLE = 0,    // no search started this session
+		SEARCH_LIFECYCLE_RUNNING = 1, // active search in flight
+		SEARCH_LIFECYCLE_FINISHED = 2 // last search completed; results retained
+	};
+	SearchLifecycleState GetSearchLifecycleState() const;
+	// Echoes m_searchType for the current/last search; meaningful only
+	// when state is RUNNING or FINISHED. Returns LocalSearch by default.
+	SearchType GetSearchLifecycleKind() const { return m_searchType; }
+	// Result count for the current search; 0 if idle.
+	std::size_t GetCurrentSearchResultCount() const;
+	// Unified 0..100 completion for the current search, surfaced via
+	// EC_TAG_SEARCH_LIFECYCLE_PERCENT. Global uses the real server-queue
+	// percent; Kad — which has no measurable progress — gets a cosmetic
+	// time-ramp off the fixed keyword-search lifetime that the FINISHED
+	// lifecycle state authoritatively snaps to 100. Idle returns 0.
+	uint8 GetSearchLifecyclePercent() const;
+
 	/** This function is called once the local (ed2k) search has ended. */
 	void LocalSearchEnd();
 
@@ -191,6 +213,16 @@ private:
 	void OnGlobalSearchTimer(CTimerEvent &evt);
 
 	/**
+	 * Shared cleanup for global-search completion. Releases the search
+	 * packet, stops the timer, notifies 100% progress, and sets
+	 * m_ed2kSearchFinished. Callers decide whether to also reset
+	 * m_currentSearch: StopSearch does (explicit abort), the natural-
+	 * drain path in OnGlobalSearchTimer does not (preserving the ID
+	 * lets GetSearchLifecycleState report FINISHED instead of IDLE).
+	 */
+	void FinalizeGlobalSearch();
+
+	/**
 	 * Adds the specified file to the current search's results.
 	 *
 	 * @param toadd The result to add.
@@ -229,6 +261,19 @@ private:
 
 	//! If the current search is a KAD search this signals if it is finished.
 	bool m_KadSearchFinished;
+
+	//! ED2K-side counterpart of m_KadSearchFinished, covering both local
+	//! and global searches. Cleared to false in StartNewSearch when an
+	//! ED2K search is issued; set back to true in LocalSearchEnd (local)
+	//! or FinalizeGlobalSearch (global — both natural drain and
+	//! explicit abort). GetSearchLifecycleState uses this as the
+	//! RUNNING vs FINISHED signal for the ED2K branch.
+	bool m_ed2kSearchFinished;
+
+	//! Wall-clock start of the current/last search. Stamped in
+	//! StartNewSearch; feeds the Kad cosmetic progress ramp in
+	//! GetSearchLifecyclePercent.
+	time_t m_searchStart;
 
 	//! Queue of servers to ask when doing global searches.
 	//! TODO: Replace with 'cookie' system.

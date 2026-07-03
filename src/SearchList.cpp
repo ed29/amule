@@ -50,6 +50,7 @@
 
 #include "kademlia/kademlia/Kademlia.h"
 #include "kademlia/kademlia/Search.h"
+#include "kademlia/kademlia/Defines.h" // Needed for SEARCHKEYWORD_LIFETIME (Kad ramp)
 
 #include "SearchExpr.h"
 
@@ -271,6 +272,8 @@ CSearchList::CSearchList()
 , m_searchPacket(NULL)
 , m_64bitSearchPacket(false)
 , m_KadSearchFinished(true)
+, m_ed2kSearchFinished(true)
+, m_searchStart(0)
 {
 }
 
@@ -353,6 +356,7 @@ wxString CSearchList::StartNewSearch(uint32 *searchID, SearchType type, CSearchP
 	}
 
 	m_searchType = type;
+	m_searchStart = time(NULL);
 
 	// EC clients reuse the sentinel `0xffffffff` for every search regardless
 	// of network type. `Get_EC_Response_Search` -> `RemoveResults(0xffffffff)`
@@ -388,6 +392,7 @@ wxString CSearchList::StartNewSearch(uint32 *searchID, SearchType type, CSearchP
 		// This is an ed2k search, local or global
 		m_currentSearch = *(searchID);
 		m_searchInProgress = true;
+		m_ed2kSearchFinished = false;
 
 		CPacket *searchPacket = new CPacket(*data.get(), OP_EDONKEYPROT, OP_SEARCHREQUEST);
 
@@ -416,6 +421,7 @@ void CSearchList::LocalSearchEnd()
 		m_searchTimer.Start(750);
 	} else {
 		m_searchInProgress = false;
+		m_ed2kSearchFinished = true;
 		Notify_SearchLocalEnd();
 	}
 }
@@ -442,6 +448,67 @@ uint32 CSearchList::GetSearchProgress() const
 	default:
 		wxFAIL;
 	}
+	return 0;
+}
+
+CSearchList::SearchLifecycleState CSearchList::GetSearchLifecycleState() const
+{
+	// m_currentSearch defaults to wxUIntPtr(-1) at construction and after
+	// an explicit StopSearch. A natural global-search completion (via
+	// FinalizeGlobalSearch from OnGlobalSearchTimer) preserves it, so
+	// completed-then-idle-view still reports FINISHED here.
+	if (m_currentSearch == wxUIntPtr(-1)) {
+		return SEARCH_LIFECYCLE_IDLE;
+	}
+	if (m_searchType == KadSearch) {
+		return m_KadSearchFinished ? SEARCH_LIFECYCLE_FINISHED : SEARCH_LIFECYCLE_RUNNING;
+	}
+	// ED2K (Local / Global): m_ed2kSearchFinished mirrors m_KadSearchFinished.
+	return m_ed2kSearchFinished ? SEARCH_LIFECYCLE_FINISHED : SEARCH_LIFECYCLE_RUNNING;
+}
+
+std::size_t CSearchList::GetCurrentSearchResultCount() const
+{
+	if (m_currentSearch == wxUIntPtr(-1)) {
+		return 0;
+	}
+	ResultMap::const_iterator it = m_results.find(m_currentSearch);
+	return (it == m_results.end()) ? 0 : it->second.size();
+}
+
+uint8 CSearchList::GetSearchLifecyclePercent() const
+{
+	switch (GetSearchLifecycleState()) {
+	case SEARCH_LIFECYCLE_IDLE:
+		return 0;
+	case SEARCH_LIFECYCLE_FINISHED:
+		// Authoritative completion edge for every search kind.
+		return 100;
+	case SEARCH_LIFECYCLE_RUNNING:
+		break;
+	}
+
+	// --- RUNNING ---
+	if (m_searchType == KadSearch) {
+		// Kad has no measurable progress, so synthesise a cosmetic ramp
+		// from the fixed keyword-search lifetime. The FINISHED state above
+		// is what snaps it to 100; capped at 99 so the ramp never claims
+		// completion before the daemon actually does.
+		time_t elapsed = time(NULL) - m_searchStart;
+		if (elapsed <= 0) {
+			return 0;
+		}
+		uint32 pct = (uint32)((elapsed * 100) / SEARCHKEYWORD_LIFETIME);
+		return (pct > 99) ? 99 : (uint8)pct;
+	}
+
+	if (m_searchType == GlobalSearch) {
+		// Real server-queue-driven percent (0..100).
+		uint32 pct = GetSearchProgress();
+		return (pct > 100) ? 100 : (uint8)pct;
+	}
+
+	// LocalSearch is instantaneous and never observed RUNNING here.
 	return 0;
 }
 
@@ -532,8 +599,10 @@ void CSearchList::OnGlobalSearchTimer(CTimerEvent &WXUNUSED(evt))
 			}
 		}
 	}
-	// No more servers left to ask.
-	StopSearch(true);
+	// No more servers left to ask. Natural completion — preserve
+	// m_currentSearch so GetSearchLifecycleState reports FINISHED,
+	// not IDLE.
+	FinalizeGlobalSearch();
 }
 
 void CSearchList::ProcessSharedFileList(const uint8_t *in_packet,
@@ -711,21 +780,27 @@ bool CSearchList::RequestMoreResults(uint32_t searchID)
 void CSearchList::StopSearch(bool globalOnly)
 {
 	if (m_searchType == GlobalSearch) {
+		FinalizeGlobalSearch();
 		m_currentSearch = -1;
-		delete m_searchPacket;
-		m_searchPacket = NULL;
-		m_searchInProgress = false;
-
-		// Order is crucial here: on wx_MSW an additional event can be generated during the stop.
-		// So the packet has to be deleted first, so that OnGlobalSearchTimer() returns immediately
-		// without calling StopGlobalSearch() again.
-		m_searchTimer.Stop();
-
-		CoreNotify_Search_Update_Progress(0xffff);
 	} else if (m_searchType == KadSearch && !globalOnly) {
 		Kademlia::CSearchManager::StopSearch(m_currentSearch, false);
 		m_currentSearch = -1;
 	}
+}
+
+void CSearchList::FinalizeGlobalSearch()
+{
+	m_ed2kSearchFinished = true;
+	// Order is crucial here: on wx_MSW an additional event can be
+	// generated during the stop. So the packet has to be deleted
+	// first, so that OnGlobalSearchTimer() returns immediately
+	// (packet-null early return) without re-entering this path.
+	delete m_searchPacket;
+	m_searchPacket = NULL;
+	m_searchInProgress = false;
+	m_searchTimer.Stop();
+
+	CoreNotify_Search_Update_Progress(0xffff);
 }
 
 CSearchList::CMemFilePtr CSearchList::CreateSearchData(

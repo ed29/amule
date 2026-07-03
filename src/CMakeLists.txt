@@ -69,6 +69,16 @@ if (BUILD_WEBSERVER)
 	add_subdirectory (webserver)
 endif()
 
+# Pure-logic primitives (JWT / ETag / route patterns / JSON writer)
+# that the upcoming amuleapi binary and its unit tests link against.
+# Built unconditionally — no transitive cost for builds that don't
+# consume it (static lib, zero runtime overhead).
+add_subdirectory (libwebcommon)
+
+if (BUILD_AMULEAPI)
+	add_subdirectory (webapi)
+endif()
+
 if (INSTALL_SKINS)
 	add_subdirectory (skins)
 endif()
@@ -381,6 +391,25 @@ if (BUILD_MONOLITHIC)
 					VERBATIM
 				)
 			endforeach()
+		endif()
+
+		# Mirror for amuleapi's static-frontend root. Resolves at
+		# runtime via LSCopyApplicationURLsForBundleIdentifier(
+		# "org.amule.aMule") + CFBundleCopyResourceURL("amuleapi-
+		# static"); see Api.cpp::ResolveDefaultStaticDir. Without this
+		# step a Mac user who installed via the .app bundle would get
+		# `404 no such endpoint` on GET / unless they hand-edited
+		# amuleapi.conf StaticRoot.
+		if (BUILD_AMULEAPI)
+			set (_apifs_src "${CMAKE_SOURCE_DIR}/src/webapi/static")
+			set (_apifs_dst
+				"$<TARGET_BUNDLE_CONTENT_DIR:amule>/Resources/amuleapi-static")
+			add_custom_command (TARGET amule POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_directory
+					"${_apifs_src}" "${_apifs_dst}"
+				COMMENT "Bundling amuleapi static frontend into aMule.app"
+				VERBATIM
+			)
 		endif()
 	endif()
 
