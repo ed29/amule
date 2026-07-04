@@ -643,7 +643,7 @@ bool CamuleApp::OnInit()
 
 	// Check if we have the old style locale config
 	bool old_localedef = false;
-	wxString langId = thePrefs::GetLanguageID();
+	const wxString &langId = thePrefs::GetLanguageID();
 	if (!langId.IsEmpty() && (langId.GetChar(0) >= '0' && langId.GetChar(0) <= '9')) {
 		old_localedef = true;
 		thePrefs::SetLanguageID(wxLang2Str(wxLANGUAGE_DEFAULT));
@@ -1001,6 +1001,9 @@ bool CamuleApp::OnInit()
 	// Run webserver?
 	if (thePrefs::GetWSIsEnabled()) {
 		wxString aMuleConfigFile = thePrefs::GetConfigDir() + m_configFile;
+		// Not a const&: the __WXMAC__ block below reassigns this. clang-tidy runs
+		// on Linux where that block is #ifdef'd out, so it can't see the write.
+		// NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
 		wxString amulewebPath = thePrefs::GetWSPath();
 
 #if defined(__WXMAC__) && !defined(AMULE_DAEMON)
