@@ -14,7 +14,7 @@ msgstr ""
 "Project-Id-Version: aMule\n"
 "Report-Msgid-Bugs-To: https://github.com/amule-org/amule/issues\n"
 "POT-Creation-Date: 2026-07-20 23:50+0200\n"
-"PO-Revision-Date: 2026-07-21 11:48+0000\n"
+"PO-Revision-Date: 2026-07-22 14:02+0000\n"
 "Last-Translator: Mike Akiba <mike2718@gmail.com>\n"
 "Language-Team: Chinese Simplified <kde-i18n-doc@kde.org>\n"
 "Language: zh_CN\n"
@@ -4210,7 +4210,7 @@ msgstr "垂直显示工具栏"
 
 #: src/muuli_wdr.cpp:1971
 msgid "Live column sorting (auto-reorder rows as their values change)"
-msgstr ""
+msgstr "实时列排序（值更改时自动调整顺序）"
 
 #: src/muuli_wdr.cpp:1978
 msgid "Download Queue Files"

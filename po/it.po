@@ -20,7 +20,7 @@ msgstr ""
 "Project-Id-Version: aMule 2.3.3\n"
 "Report-Msgid-Bugs-To: https://github.com/amule-org/amule/issues\n"
 "POT-Creation-Date: 2026-07-20 23:50+0200\n"
-"PO-Revision-Date: 2026-07-21 11:40+0000\n"
+"PO-Revision-Date: 2026-07-22 14:01+0000\n"
 "Last-Translator: got3nks <got3nks@users.noreply.github.com>\n"
 "Language-Team: SebastianoPistore.info@protonmail.ch\n"
 "Language: it\n"
@@ -4220,7 +4220,7 @@ msgstr "Orientamento verticale della barra degli strumenti"
 
 #: src/muuli_wdr.cpp:1971
 msgid "Live column sorting (auto-reorder rows as their values change)"
-msgstr ""
+msgstr "Ordinamento colonne in tempo reale (riordina le righe automaticamente al variare dei loro valori)"
 
 #: src/muuli_wdr.cpp:1978
 msgid "Download Queue Files"
