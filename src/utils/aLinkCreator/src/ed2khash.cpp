@@ -219,13 +219,13 @@ wxString Ed2kHash::GetED2KLink(const bool addPartHashes, const wxArrayString *ar
 	return ed2kLink;
 }
 
-/// Strip all non-alphanumeric characters of a filename string
 wxString Ed2kHash::CleanFilename(const wxString &filename)
 {
 	wxString name(filename);
-
-	wxRegEx toStrip("[^[:alnum:]_.-]");
-	toStrip.Replace(&name, "_");
+    // Only replace characters that break ed2k link parsing
+    name.Replace("|", "_");
+    name.Replace("/", "_");
+    name.Replace("\\", "_");
 
 	return (name);
 }
