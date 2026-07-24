@@ -222,12 +222,16 @@ wxString Ed2kHash::GetED2KLink(const bool addPartHashes, const wxArrayString *ar
 wxString Ed2kHash::CleanFilename(const wxString &filename)
 {
 	wxString name(filename);
-    // Only replace characters that break ed2k link parsing
-    name.Replace("|", "_");
-    name.Replace("/", "_");
-    name.Replace("\\", "_");
-
-	return (name);
+	// Replace only what breaks ed2k link parsing: the field separator,
+	// the end-of-link marker, path separators, and control characters.
+	// Printable Unicode is preserved (files are keyed by hash + size).
+	for (size_t i = 0; i < name.length(); ++i) {
+		const wxUniChar ch = name[i];
+		if (ch == '|' || ch == '/' || ch == '\\' || ch < 0x20 || ch == 0x7f) {
+			name[i] = '_';
+		}
+	}
+	return name;
 }
 
 /// Get Ed2k Array of hashes
